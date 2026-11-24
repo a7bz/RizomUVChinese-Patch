@@ -1,0 +1,86 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. v1.0.0). Leave empty to build artifacts only."
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+env:
+  # Chinese asset names and Chinese console output; force UTF-8 on every runner.
+  PYTHONUTF8: "1"
+  PYTHONIOENCODING: "utf-8"
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      # The dictionary is plain text (translations only, no game files), so the whole
+      # build runs without RizomUV installed. This gate catches encoding damage and
+      # empty values before anything gets packaged.
+      - name: Check dictionary
+        run: python tools/check_dictionary.py
+
+      # Compiles the runtime/launcher with MSVC (preinstalled on windows-latest),
+      # then compiles the C# installer with the embedded payload.
+      - name: Build installer and packages
+        run: python tools/build_release.py --version "${{ github.ref_type == 'tag' && github.ref_name || inputs.tag || 'dev' }}"
+
+      - name: Show artifacts
+        shell: pwsh
+        run: Get-ChildItem release | Format-Table Name, Length
+
+      # GitHub rewrites release asset names that contain non-ASCII characters, so the
+      # uploads get ASCII names while the build output keeps the readable ones.
+      - name: Stage release assets
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}"
+          if (-not $tag) { $tag = "dev" }
+          New-Item -ItemType Directory -Force -Path upload | Out-Null
+          Copy-Item "release/RizomUVChinese-Patch-v*.exe"            "upload/RizomUVChinese-Patch-$tag.exe"
+          Copy-Item "release/RizomUVChinese-Patch-v*-Portable.zip"   "upload/RizomUVChinese-Patch-$tag-Portable.zip"
+          Copy-Item "release/README-zh.txt"                          "upload/README-zh.txt"
+          Copy-Item "release/manifest.json"                          "upload/manifest.json"
+          Get-ChildItem upload | Format-Table Name, Length
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: RizomUV-Chinese-patch
+          path: upload/*
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/') || inputs.tag != ''
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
+          name: RizomUV 汉化补丁 ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
+          body: |
+            RizomUV VS / RS 2020.1 简体中文界面补丁。
+
+            | 文件 | 说明 |
+            | --- | --- |
+            | `RizomUVChinese-Patch-*.exe` | 单文件安装包，自动检测安装目录，支持静默安装 `/S` |
+            | `RizomUVChinese-Patch-*-Portable.zip` | 免安装绿色版，解压后运行 `安装.bat` |
+            | `README-zh.txt` | 使用说明 |
+
+            **安装后请用桌面上的「RizomUV 中文版」启动**，直接运行 `rizomuv.exe` 仍是英文界面。
+
+            补丁不修改 `rizomuv.exe`，不写注册表，不需要改系统代码页；卸载后完整还原英文。只包含界面翻译与加载工具，不包含 RizomUV 的任何程序文件，请先自行安装正版软件。
+          draft: false
+          generate_release_notes: true
+          files: upload/*

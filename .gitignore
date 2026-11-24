@@ -1,0 +1,22 @@
+# 构建产物
+build/
+dist/
+release/
+upload/
+
+# Python
+__pycache__/
+*.pyc
+
+# 编辑器
+.vs/
+.vscode/
+*.user
+*.suo
+
+# 系统
+Thumbs.db
+desktop.ini
+
+# 运行时日志（调试时可能落在仓库里）
+*.log
