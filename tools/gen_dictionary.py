@@ -421,6 +421,8 @@ COLOR = {
     "Other options": "其他选项",
     "Custom": "自定义",
     "Enable": "启用",
+    # 变换面板的开关按钮在关闭状态绘制小写 "enable"（与 "Enable" 是两个不同字符串）
+    "enable": "启用",
     "Frontiers": "边界",
     "Normalize Tile": "归一化贴图块",
     "Current": "当前",
@@ -1078,7 +1080,7 @@ SKIP = {
     "in", "ft", "yd", "mi", "dpi", "1:1",
     "Tx", "Tv", "Su", "Sv", "U & V", "UV Mapping Application",
     "no data     (no data)", "Status: OK", "ZomLoadPrefs(none)",
-    "ZomSet({Path=\"\"})", "default", "deviation", "edge", "enable",
+    "ZomSet({Path=\"\"})", "default", "deviation", "edge",
     "W&H Units", "WH Units",
     "PELT", "Px", "Rw", "In", "Tu", "Tv", "Su", "Sv",
     "2014/2015", "2017/2018",

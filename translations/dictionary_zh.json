@@ -429,6 +429,7 @@
   "Edit.": "编辑",
   "Email account:": "邮箱账户：",
   "Enable": "启用",
+  "enable": "启用",
   "Enable / Disable Symmetry": "启用 / 禁用对称",
   "Enable Auto Deselected After isolate": "孤立后自动取消选择",
   "Enable export of rasterized UV in a image file using channel A's settings": "按通道 A 的设置将 UV 栅格化导出为图像文件。",

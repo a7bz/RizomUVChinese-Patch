@@ -54,7 +54,7 @@ RizomUVChinese-Patch-v1.0.0.exe /uninstall
 ```
 RizomUVChineseLauncher.exe    启动器（注入运行时后启动 rizomuv.exe）
 RizomUVChineseRuntime.dll     运行时（负责替换界面文字）
-dictionary_zh.json            词典（1,722 条译文，UTF-8 JSON）
+dictionary_zh.json            词典（1,723 条译文，UTF-8 JSON）
 ```
 
 外加一个记录安装状态的 `chinese_patch.json`。若安装目录里本来就有同名文件，安装前会备份到 `chinese_patch_backup\`，卸载时还原。
@@ -85,7 +85,11 @@ dictionary_zh.json            词典（1,722 条译文，UTF-8 JSON）
 
 帮助面板里的少数长段落仍是英文。这类文本宿主只在**测量**路径调用 GDI、绘制时用自己的字形图集直接渲染，不经过任何可钩子的文字输出函数。在钩子层替换它只会让测量宽度与实际绘制不一致，反而破坏排版，因此保持原样。
 
+同类情况还有视口左上角的 `Tile 1001 0%` 与 `0 Selected 0 Hidden` 状态角标——它们由宿主自己的字形图集绘制，同样无法通过 GDI 钩子替换。
+
 品牌名（`RizomUV`、`Maya`、`Blender` 等）、单位符号（`px`、`cm`、`tu/cm`）、坐标轴标记（`Tu`/`Tv`/`Su`/`Sv`）、鼠标组合键（`LMB-Ctrl`）保持原样，这是刻意的。
+
+快捷键定制面板里的动作标识（`SELECT`、`DESELECT`、`ADD_SELECT`、`PAN`、`ZOOM` 等）也保持英文。它们与配置文件中的键名一一对应，整族一起保留比只翻其中几个更好读。注意这只适用于**大写**标识；同一面板里小写的 `enable` 属于普通界面文字，已经翻译。
 
 ## 仓库结构
 

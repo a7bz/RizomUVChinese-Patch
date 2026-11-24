@@ -40,20 +40,47 @@ SKIP_PREFIX = (
     "ZomLoad", "ZomSet", "ZomGenerate",
 )
 
-# 品牌名、单位、轴标记、鼠标按键缩写：保持原样
-SKIP_EXACT = {
+# 品牌名、单位、轴标记、鼠标按键缩写：保持原样，属于刻意的设计选择。
+# 注意：这里的条目只在「不参与绘制」或「确实是单位/品牌/轴标记/动作标识」时才允许跳过。
+# 若某个条目出现在绘制路径、且是普通英文单词（如 enable），必须收进词典——
+# 否则覆盖率会被虚高统计。见 audit_skips()。
+KEEP_AS_IS = {
+    # 品牌与产品名
     "RizomUV", "RizomUV Legacy", "Maya", "3DSMax", "Softimage", "Rhino",
     "Rhino3D", "C4D", "Blender", "ZBrush", "Modo", "CUSTOMIZE",
-    "Saved Custom", "RMB Orbit", "UV Mapping Application",
-    "LMB", "RMB", "MMB", "DLMB", "Shift", "PAN", "ZOOM", "ORBIT",
-    "SELECT", "DESELECT", "PELT", "Ed",
+    "UV Mapping Application",
+    # 单位符号
     "1:1", "bmp", "png", "jpg", "tiff", "ps", "px", "cm", "mm", "km",
     "dm", "in", "ft", "yd", "mi", "dpi", "Px",
-    "default", "deviation", "edge", "enable", "Status: OK",
-    "_999999", "_u_v", "S0", "S1", "S2", "S3", "S4", "S5", "S6", "S7",
-    "2014/2015", "2017/2018",
-    # 轴标记：变换面板的坐标轴缩写，保持原样
-    "U & V", "Tu", "Tv", "Su", "Sv", "Rw", "In",
+    # 坐标轴标记（变换面板的缩写）
+    "U & V", "Tu", "Tv", "Su", "Sv", "Rw", "In", "Tx",
+    # 鼠标按键与视图操作缩写
+    "LMB", "RMB", "MMB", "DLMB", "Shift",
+    "PAN", "ZOOM", "ORBIT", "PELT", "Ed",
+    # 快捷键定制面板里的动作标识。这些名字与配置文件中的键名一一对应，
+    # 必须整族保持一致（SELECT / DESELECT / ADD_SELECT / PAN / ZOOM ...），
+    # 只翻其中几个反而更难读，因此整族保留原文。
+    "SELECT", "DESELECT", "ADD_SELECT", "ADD_SELECT_LOOP_PATH",
+    "ADD_SELECT_ROTATE", "ADD_SELECT_SCALE", "ADD_SELECT_SHORT_PATH",
+    "ADD_SELECT_TRANSLATE", "DESELECT_PATH", "SELECT_LOOP_PATH",
+    "SELECT_ROTATE", "SELECT_SCALE", "SELECT_TRANSLATE",
+    "SCALE_ISLAND", "ROTATE_ISLAND", "TRANSLATE_ISLAND",
+    "PREVIEW_SHORT_PATH", "Saved Custom", "Status: OK",
+    # 宿主内部参数名：只出现在测量路径，由自带字形图集绘制
+    "default", "deviation", "edge",
+    "S0", "S1", "S2", "S3", "S4", "S5", "S6", "S7",
+    "2014/2015", "2017/2018", "_999999", "_u_v",
+}
+
+# 小写界面单词：一旦出现在绘制路径就必须有译文。
+# 这是防回归的闸门——曾经 `enable` 被误放进跳过清单，导致覆盖率虚高。
+# 只收小写形式，因为大写的是动作标识（见 KEEP_AS_IS）。
+SUSPECT_WORDS = {
+    "enable", "disable", "on", "off", "yes", "no", "ok", "cancel", "apply",
+    "close", "open", "save", "load", "reset", "clear", "none", "auto",
+    "true", "false", "show", "hide", "lock", "unlock", "add", "remove",
+    "delete", "copy", "paste", "cut", "undo", "redo",
+    "custom", "normal", "invert", "mirror", "fit", "center",
 }
 
 DRAW_TAGS = {"ExtTextOutW", "TextOutW", "DrawTextW", "DrawStateW"}
@@ -109,13 +136,19 @@ def find_misses() -> list[str]:
 
 
 def is_skip(t: str) -> bool:
+    """判断某字符串是否不属于「需要翻译的界面文本」。
+
+    这里只排除三类：动态数值、内部标识前缀、以及刻意保留的品牌/单位/轴标记。
+    是否「刻意保留」由 KEEP_AS_IS 决定；如果它同时是 SUSPECT_WORDS 里的
+    普通英文单词，则不算跳过——那属于漏翻，交给 audit_skips() 报警。
+    """
     if len(t.strip()) <= 1:
         return True
     # 首尾空白是宿主的排版手段，运行时会去掉空白再查表，不算缺失
     t = t.strip()
     if all(c in "0123456789.+-°" for c in t):
         return True
-    if t in SKIP_EXACT:
+    if t in KEEP_AS_IS and t.lower() not in SUSPECT_WORDS:
         return True
     # 鼠标组合键（LMB-Ctrl-Space 等）与轴标记（X+Y+、Box X-Y-）
     if t.startswith(("LMB", "RMB", "MMB", "DLMB")):
@@ -132,6 +165,22 @@ def is_skip(t: str) -> bool:
     if any("\u4e00" <= c <= "\u9fff" for c in t):
         return True
     return False
+
+
+def audit_skips(inventory: dict[str, set[str]], table: dict[str, str]) -> list[str]:
+    """找出「被 is_skip 放过、但其实是普通界面单词」的条目。
+
+    这类字符串会静默拉高覆盖率。典型例子：变换面板关闭状态下绘制的小写
+    `enable`，因为 KEEP_AS_IS 里曾有 `enable` 而被算作已覆盖，实际仍是英文。
+    """
+    bad: list[str] = []
+    for text, tags in inventory.items():
+        t = text.strip()
+        if t in table:
+            continue
+        if t.lower() in SUSPECT_WORDS:
+            bad.append(text)
+    return sorted(set(bad))
 
 
 def classify(missing: list[str], table: dict[str, str],
@@ -199,6 +248,16 @@ def main() -> int:
         print(f"覆盖率       : {pct:.1f}%")
         print(f"词典总条目   : {len(table)}")
         report_real(real, len(real) if args.all else 40)
+
+        # 被跳过清单掩盖的普通英文单词（如曾经的 enable）
+        skipped = audit_skips(inventory, table)
+        if skipped:
+            print(f"\n-- 被跳过清单掩盖、需要补译（{len(skipped)} 条）--")
+            for t in skipped:
+                print(f"  {t!r}")
+            print("  这些是普通界面单词，不应出现在 KEEP_AS_IS 里。")
+            return 1
+
         return 0
 
     # ---- 只有诊断文件：报告本次运行仍显示英文的条目
