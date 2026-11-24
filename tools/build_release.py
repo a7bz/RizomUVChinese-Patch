@@ -41,15 +41,6 @@ DICTIONARY = "dictionary_zh.json"
 
 GREEN_SCRIPTS = ["安装.bat", "卸载.bat", "查看状态.bat", "创建快捷方式.bat", "patch.ps1"]
 
-CSC_CANDIDATES = [
-    r"%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\Roslyn\csc.exe",
-    r"%ProgramFiles%\Microsoft Visual Studio\2022\Professional\MSBuild\Current\Bin\Roslyn\csc.exe",
-    r"%ProgramFiles%\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\Roslyn\csc.exe",
-    r"%ProgramFiles%\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\Roslyn\csc.exe",
-    r"%ProgramFiles(x86)%\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\Roslyn\csc.exe",
-    r"%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe",
-]
-
 
 def log(msg: str) -> None:
     print(msg, flush=True)
@@ -59,12 +50,52 @@ def expand(path: str) -> Path:
     return Path(os.path.expandvars(path))
 
 
+CSC_CANDIDATES = [
+    # Visual Studio 2026 ships under a version-numbered root (18).
+    r"%ProgramFiles%\Microsoft Visual Studio\18\Enterprise\MSBuild\Current\Bin\Roslyn\csc.exe",
+    r"%ProgramFiles%\Microsoft Visual Studio\18\Professional\MSBuild\Current\Bin\Roslyn\csc.exe",
+    r"%ProgramFiles%\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\Roslyn\csc.exe",
+    r"%ProgramFiles%\Microsoft Visual Studio\18\BuildTools\MSBuild\Current\Bin\Roslyn\csc.exe",
+    r"%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\Roslyn\csc.exe",
+    r"%ProgramFiles%\Microsoft Visual Studio\2022\Professional\MSBuild\Current\Bin\Roslyn\csc.exe",
+    r"%ProgramFiles%\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\Roslyn\csc.exe",
+    r"%ProgramFiles%\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\Roslyn\csc.exe",
+    r"%ProgramFiles(x86)%\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\Roslyn\csc.exe",
+    # Last resort: the in-box .NET Framework compiler (C# 5, enough for Setup.cs).
+    r"%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe",
+]
+
+VSWHERE = r"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
+
+
 def find_csc() -> Path | None:
     override = os.environ.get("CSC_PATH")
     if override:
         p = Path(override)
         if p.exists():
             return p
+
+    # Ask vswhere first: it reports the real install path for whatever Visual
+    # Studio version is present, so version-numbered roots (18 for VS 2026)
+    # never need to be hardcoded.
+    vswhere = expand(VSWHERE)
+    if vswhere.exists():
+        try:
+            result = subprocess.run(
+                [str(vswhere), "-latest", "-prerelease", "-products", "*",
+                 "-property", "installationPath"],
+                capture_output=True, text=True, timeout=60,
+            )
+            for line in result.stdout.splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                p = Path(line) / "MSBuild" / "Current" / "Bin" / "Roslyn" / "csc.exe"
+                if p.exists():
+                    return p
+        except Exception:
+            pass
+
     for c in CSC_CANDIDATES:
         p = expand(c)
         if p.exists():
